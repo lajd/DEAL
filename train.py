@@ -1,13 +1,11 @@
-import os
-import torch.nn as nn 
 import time
+
 from tqdm import tqdm
 from utils import *
 from model import *
 
 from args import *
-from torch_geometric.nn import Node2Vec
-from torch.utils.data import DataLoader
+
 
 # args
 args = make_args()

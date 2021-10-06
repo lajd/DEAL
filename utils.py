@@ -265,6 +265,7 @@ def get_A(adj_dict, nodeNum):
 
 def save_sp(folder, name, M):
     return sp.save_npz(folder+name+'_sp.npz', M.tocsr())
+
 def load_sp(folder,name):
     return sp.load_npz(folder+name+'_sp.npz')
 
@@ -720,6 +721,7 @@ def detailed_eval(model,test_data,gt_labels,sp_M, evaluate,nodes_keep=None, verb
                 print( s+' ROC-AUC:%.4f AP:%.4f'%res[s])
     return res
 
+
 def load_datafile(args):
     nodes_keep = None
     device = torch.device('cuda:'+str(args.cuda) if args.gpu else 'cpu')
@@ -837,7 +839,7 @@ def load_dists(dataset):
     else:
         dists_file_name = 'data/' + dataset +'/dists2.dat'
         if os.path.exists(dists_file_name):
-            return pickle.load(dists_file)
+            return pickle.load(dists_file_name)
         else:
             return None
 

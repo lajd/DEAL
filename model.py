@@ -1,10 +1,7 @@
 import torch
 import torch.nn as nn 
 import torch.nn.functional as F
-import numpy as np 
 import torch_geometric as tg
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import add_self_loops, degree
 from torch.nn import init
 
 ####################### Basic Ops #############################
@@ -463,7 +460,7 @@ class DEAL(nn.Module):
             labels = labels.float()
         nodes = inputs.to(self.device)
         labels = labels.to(self.device)
-        dists = data.dists[nodes[:,0],nodes[:,1]] 
+        dists = data.dists[nodes[:,0],nodes[:,1]]
 
         loss_list = []
 

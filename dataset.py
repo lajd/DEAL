@@ -26,6 +26,9 @@ from torch_geometric.data import Data, DataLoader
 
 import multiprocessing as mp
 import torch.nn.functional as F
+import args
+
+
 
 def get_pred(args, model, data, edges):
     if args.model == 'G2G':
@@ -409,7 +412,7 @@ def get_tg_dataset(args, dataset_name, use_cache=True, remove_feature=False):
         if args.task=='link':
             dists_removed = precompute_dist_data(data.mask_link_positive_train, data.num_nodes,
                                                  approximate=args.approximate)
-            --lossremoved_list.append(dists_removed)
+            dists_removed_list.append(dists_removed)
             data.dists = torch.from_numpy(dists_removed).float()
             # data.edge_index = torch.from_numpy(duplicate_edges(data.mask_link_positive_train)).long()
         else:
@@ -427,7 +430,6 @@ def get_tg_dataset(args, dataset_name, use_cache=True, remove_feature=False):
             open(f5_name, 'wb') as f5, \
             open(feature_name, 'wb') as feature_file, \
             open(neg_links_name, 'wb') as neg_file:
-
             
             if args.task=='link':
                 with open(f2_name, 'wb') as f2:
@@ -718,3 +720,9 @@ def load_graphs(dataset_str):
 def load_tg_dataset(name='communities'):
     graphs, features, edge_labels = load_graphs(name)
     return nx_to_tg_data(graphs, features, edge_labels)
+
+
+if __name__ == '__main__':
+    args_ = args.make_args()
+
+    get_tg_dataset(args_, args_.dataset)

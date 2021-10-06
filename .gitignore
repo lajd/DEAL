@@ -1,0 +1,29 @@
+datasets
+**.dat
+
+.mypy_cache
+.pytest_cache
+*/*.pyc
+*/*.pyd
+*/**/__pycache__
+*.egg-info
+__pycache__/
+
+# Editor temporaries
+*.swn
+*.swo
+*.swp
+*.swm
+*~
+
+# macOS dir files
+.DS_Store
+
+*.pt
+*.gz
+*.tar
+
+# IDE files
+.idea
+.vscode
+.vs

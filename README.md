@@ -3,17 +3,42 @@
 This is the implementation of "[Inductive Link Prediction for Nodes Having Only Attribute Information
 ](https://www.ijcai.org/Proceedings/2020/168)" published at IJCAI 2020.
 
-### Environment
-pytorch 1.4.0
 
-python 3.7.4
+### Requirements
+- Linux
+- Cuda version 11.0
 
-pytorch-geometric 1.4.3
+### Installation
 
-cuda 10.1
+```shell
+#!/bin/bash
 
-### Train DEAL
-`python train.py`
+CONDA_ENV_NAME=DEAL
+
+#conda clean --all -y
+source ./config.sh
+conda env list | grep ${CONDA_ENV_NAME}
+if [ $? -eq 0 ]; then
+    echo "DEAL environment already exists; skipping creation"
+else
+    echo "Creating ${CONDA_ENV_NAME} environment"
+    conda create -n ${CONDA_ENV_NAME} python=3.9 -y
+fi
+
+conda activate ${CONDA_ENV_NAME}
+
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia -y
+conda install -q -y numpy pyyaml scipy ipython mkl mkl-include conda-build
+conda install pyg -c pyg -c conda-forge -y
+
+pip install -e .
+
+# Download CiteCeer `dists`
+gdown https://drive.google.com/uc?id=1LqSKvzsDThMzqZWBQqP9b-k3KeEtaUto
+mv dists-1.dat data/CiteSeer/
+```
+### Train DEAL on the CiteSeer dataset
+`make train`
 
 ### Datasets
 More datasets can be found at https://pytorch-geometric.readthedocs.io/en/latest/modules/datasets.html.

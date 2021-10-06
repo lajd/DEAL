@@ -1,4 +1,6 @@
+import argparse
 from argparse import ArgumentParser
+
 
 def make_args(input = None):
     parser = ArgumentParser()
@@ -98,6 +100,7 @@ def make_args(input = None):
     else:
         args = parser.parse_args(input)
     return args
+
 
 def str2bool(v):
     if isinstance(v, bool):
