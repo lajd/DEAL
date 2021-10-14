@@ -10,7 +10,7 @@ from args import *
 # args
 args = make_args()
 
-device = torch.device('cuda:'+str(args.cuda) if args.gpu else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 print("Device: using ", device)
 
@@ -26,6 +26,8 @@ print(f'theta_list:{theta_list}')
 
 
 A, X, A_train, X_train, data, train_ones, val_edges, test_edges, folder, val_labels, gt_labels, nodes_keep = load_datafile(args)
+
+
 
 
 if args.inductive:
@@ -120,9 +122,11 @@ for repeat in tqdm(range(args.repeat_num)):
 
         running_loss += loss.item()
         b_num = 5
+
+        print(val_edges.shape)
         if epoch% b_num == b_num-1:   
             avg_loss = running_loss / b_num
-            val_scores = tran_eval(deal, val_edges, val_labels,data ,lambdas=lambda_list)
+            val_scores = transductive_eval(deal, val_edges, val_labels,data ,lambdas=lambda_list)
             
             running_loss = 0.0
             val_result = np.vstack((val_result,np.array(val_scores)))
@@ -131,9 +135,9 @@ for repeat in tqdm(range(args.repeat_num)):
             if tmp_max > max_val_score:
                 max_val_score = tmp_max
                 if args.inductive:
-                    final_scores = avg_loss, *ind_eval(deal, test_edges, gt_labels,sp_X,nodes_keep ,lambdas=lambda_list)
+                    final_scores = avg_loss, *inductive_eval(deal, test_edges, gt_labels, sp_X, nodes_keep ,lambdas=lambda_list)
                 else:
-                    final_scores = avg_loss, *tran_eval(deal, test_edges, gt_labels,data ,lambdas=lambda_list)
+                    final_scores = avg_loss, *transductive_eval(deal, test_edges, gt_labels,data ,lambdas=lambda_list)
             for tmp_d in margin_dict:
                 pairs = margin_pairs[tmp_d]
                 margin_dict[tmp_d][repeat].append([deal.node_forward(pairs).mean().item(),deal.attr_forward(pairs,data).mean().item()])
@@ -147,16 +151,16 @@ for repeat in tqdm(range(args.repeat_num)):
     # if args.inductive:
     #     print()
     #     print('Evaluate Validation Dataset')
-    #     detailed_eval(deal, val_edges, val_labels, sp_X,ind_eval,nodes_keep)
+    #     detailed_eval(deal, val_edges, val_labels, sp_X,inductive_eval,nodes_keep)
     #     print()
     #     print('Evaluate Test Dataset')
-    #     detailed_eval(deal, test_edges,gt_labels,sp_X,ind_eval,nodes_keep)
+    #     detailed_eval(deal, test_edges,gt_labels,sp_X,inductive_eval,nodes_keep)
     # else: 
     #     print()
     #     print('Evaluate Validation Dataset')
-    #     detailed_eval(deal, val_edges, val_labels, data,tran_eval,verbose=True)
+    #     detailed_eval(deal, val_edges, val_labels, data,transductive_eval,verbose=True)
     #     print()
     #     print('Evaluate Test Dataset')
-    #     detailed_eval(deal,test_edges,gt_labels,data,tran_eval,verbose=True)
+    #     detailed_eval(deal,test_edges,gt_labels,data,transductive_eval,verbose=True)
 
 

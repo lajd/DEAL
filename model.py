@@ -1,8 +1,11 @@
+from typing import Type
+
 import torch
+from torch.nn import init
 import torch.nn as nn 
 import torch.nn.functional as F
 import torch_geometric as tg
-from torch.nn import init
+from torch_geometric.data import Data
 
 ####################### Basic Ops #############################
 
@@ -89,7 +92,6 @@ class MLP(torch.nn.Module):
         self.linear_hidden = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for i in range(layer_num - 2)])
         self.linear_out = nn.Linear(hidden_dim, output_dim)
 
-
     def forward(self, data):
         x = data.x
         if self.feature_pre:
@@ -139,6 +141,7 @@ class GCN(torch.nn.Module):
         x = self.conv_out(x, edge_index)
         x = F.normalize(x, p=2, dim=-1)
         return x
+
 
 class SAGE(torch.nn.Module):
     def __init__(self, input_dim, feature_dim, hidden_dim, output_dim,
@@ -243,7 +246,6 @@ class GIN(torch.nn.Module):
         return x
 
 
-
 class PGNN(torch.nn.Module):
     def __init__(self, input_dim, feature_dim, hidden_dim, output_dim,
                  feature_pre=True, layer_num=2, dropout=True, **kwargs):
@@ -291,14 +293,15 @@ def pearsonr(x, y):
     r_den = torch.norm(xm, 2) * torch.norm(ym, 2)
     r_val = r_num / r_den
     return r_val
-    
+
+
 class Hidden_Layer(nn.Module): #Hidden Layer, Binary classification
         
     def __init__(self, emb_dim, device,BCE_mode, mode='all', dropout_p = 0.3):
         super(Hidden_Layer, self).__init__()
         self.emb_dim = emb_dim
         self.mode = mode
-        self.device = device
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.BCE_mode = BCE_mode
         self.Linear1 = nn.Linear(self.emb_dim*2, self.emb_dim).to(self.device)
         self.Linear2 = nn.Linear(self.emb_dim, 32).to(self.device)
@@ -319,7 +322,6 @@ class Hidden_Layer(nn.Module): #Hidden Layer, Binary classification
         self.softmax = nn.Softmax(dim=1)
         self.elu = nn.ELU()
         assert (self.mode in ['all','cos','dot','pdist']),"Wrong mode type"
-
 
     def forward(self, f_embs, s_embs):
 
@@ -369,9 +371,9 @@ class Hidden_Layer(nn.Module): #Hidden Layer, Binary classification
 
 class Emb(torch.nn.Module):
     def __init__(self, input_dim, feature_dim, hidden_dim, output_dim,
-                 feature_pre=False, layer_num=2, dropout=0, **kwargs):
+                 feature_pre=False, layer_num: int = 2, dropout: float = 0, **kwargs):
         super(Emb, self).__init__()
-        self.attr_emb = nn.Embedding(input_dim , output_dim)
+        self.attr_emb = nn.Embedding(input_dim, output_dim)
         self.attr_num = input_dim
 
     def forward(self, data):
@@ -380,26 +382,61 @@ class Emb(torch.nn.Module):
         return x
 
 
+def get_attr_emb_model_class(name: str):
+    name = name.lower()
+    if name == 'emb':
+        emb_model = Emb
+    elif name == 'mlp':
+        emb_model = MLP
+    elif name == 'pgnn':
+        emb_model = PGNN
+    elif name == 'gcn':
+        emb_model = GCN
+    elif name == 'gat':
+        emb_model = GAT
+    elif name == 'gin':
+        emb_model = GIN
+    else:
+        raise ValueError('Unsupported embedding method %s', name)
+    return emb_model
+
+
 class DEAL(nn.Module):
 
-    def __init__(self, emb_dim, attr_num, node_num,device, args,attr_emb_model ,h_layer=Hidden_Layer, num_classes=0 ,feature_dim=64,dropout_p = 0.3, verbose=False):
+    def __init__(
+            self,
+            emb_dim: int,
+            attr_num: int,
+            node_num: int,
+            attr_emb_model: Type[Emb],
+            n_hidden_layers: int,
+            feature_dim: int,
+            hidden_dim: int,
+            train_mode: str,
+            BCE_mode: str,
+            gamma: float,
+            use_tight_alignment: bool,
+            h_layer=Hidden_Layer,
+            num_classes=0,
+            dropout_p: float = 0.3,
+            verbose=False
+    ):
         super(DEAL, self).__init__()
-        n_hidden=args.layer_num
-        self.device = device
-        self.mode = args.train_mode
+        n_hidden = n_hidden_layers
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.mode = train_mode
         self.node_num = node_num
         self.attr_num = attr_num
         self.emb_dim = emb_dim
         self.verbose = verbose
-        self.BCE_mode = args.BCE_mode
-        self.gamma = args.gamma
-        self.s_a = args.strong_A
+        self.BCE_mode = BCE_mode
+        self.gamma = gamma
+        self.s_a = use_tight_alignment
 
         self.num_classes = num_classes
         self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
-        self.pdist = nn.PairwiseDistance(p=2,keepdim=True)       
+        self.pdist = nn.PairwiseDistance(p=2, keepdim=True)
         self.softmax = nn.Softmax(dim=1)
-
 
         self.dropout = nn.Dropout(p=dropout_p)
         if self.BCE_mode:
@@ -416,37 +453,41 @@ class DEAL(nn.Module):
 
         self.node_emb = nn.Embedding(node_num, emb_dim).to(self.device)
 
-        self.attr_emb = attr_emb_model(input_dim=attr_num, feature_dim= emb_dim,
-                                hidden_dim=emb_dim, output_dim=emb_dim,
-                                feature_pre=True, layer_num=0 if n_hidden is None else n_hidden,
-                                dropout=dropout_p).to(device)
+        self.attr_emb = attr_emb_model(
+            input_dim=attr_num,
+            feature_dim=feature_dim,
+            hidden_dim=hidden_dim,
+            output_dim=emb_dim,
+            feature_pre=True,
+            layer_num=0 if n_hidden is None else n_hidden,
+            dropout=dropout_p
+        ).to(self.device)
 
-        self.node_layer = h_layer(self.emb_dim,self.device,self.BCE_mode, mode=self.mode)
+        self.node_layer = h_layer(self.emb_dim, self.device, self.BCE_mode, mode=self.mode)
         # self.attr_layer = self.node_layer
         # self.inter_layer = self.node_layer
-        self.attr_layer = h_layer(self.emb_dim,self.device,self.BCE_mode, mode=self.mode)
-        self.inter_layer = h_layer(self.emb_dim,self.device,self.BCE_mode, mode=self.mode)
+        self.attr_layer = h_layer(self.emb_dim, self.device, self.BCE_mode, mode=self.mode)
+        self.inter_layer = h_layer(self.emb_dim, self.device, self.BCE_mode, mode=self.mode)
         
-    def node_forward(self, nodes):
-        first_embs = self.node_emb(nodes[:,0])
-        sec_embs = self.node_emb(nodes[:,1])
-        return self.node_layer(first_embs,sec_embs)
+    def node_forward(self, edge_index: torch.Tensor):
+        first_embs = self.node_emb(edge_index[:, 0])
+        sec_embs = self.node_emb(edge_index[:, 1])
+        return self.node_layer(first_embs, sec_embs)
     
-    def attr_forward(self, nodes,data):
+    def attr_forward(self, edge_index: torch.Tensor, data: tg.data.Data):
         node_emb = self.dropout(self.attr_emb(data))
-        attr_res = self.attr_layer(node_emb[nodes[:,0]],node_emb[nodes[:,1]])
+        attr_res = self.attr_layer(node_emb[edge_index[:, 0]], node_emb[edge_index[:, 1]])
         return attr_res
     
-    def inter_forward(self, nodes,data):
-        first_nodes = nodes[:,0]
+    def inter_forward(self, edge_index: torch.Tensor, data: tg.data.Data):
+        first_nodes = edge_index[:,0]
         first_embs = self.attr_emb(data)
         # first_embs = self.inter_W(first_embs)
         first_embs = self.dropout(first_embs)[first_nodes]
-        sec_embs = self.node_emb(nodes[:,1])
+        sec_embs = self.node_emb(edge_index[:,1])
         return self.inter_layer(first_embs,sec_embs)
 
-
-    def RLL_loss(self,scores,dists,labels,alpha=0.2, mode='cos'):
+    def RLL_loss(self, scores, dists, labels, alpha=0.2, mode='cos'):
 
         gamma_1 = self.gamma
         gamma_2 = self.gamma
@@ -455,24 +496,26 @@ class DEAL(nn.Module):
 
         return torch.mean(labels*(torch.log(1+torch.exp(-scores*gamma_1+b_1)))/gamma_1+ torch.exp(dists)*(1-labels)*torch.log(1+torch.exp(scores*gamma_2+b_2))/gamma_2)
 
-    def default_loss(self,inputs, labels, data,thetas=(1,1,1), train_num = 1330,c_nodes=None, c_labels=None):
+    def default_loss(self, edge_index: torch.Tensor, labels: torch.Tensor, data: Data, thetas=(1, 1, 1)):
         if self.BCE_mode:
             labels = labels.float()
-        nodes = inputs.to(self.device)
+        edge_index = edge_index.to(self.device)
         labels = labels.to(self.device)
-        dists = data.dists[nodes[:,0],nodes[:,1]]
 
+        data.dists = data.dists.to(self.device)
+
+        dists = data.dists[edge_index[:, 0], edge_index[:, 1]]
         loss_list = []
 
-        scores = self.node_forward(nodes) 
-        node_loss = self.RLL_loss(scores,dists,labels)
+        scores = self.node_forward(edge_index).to(self.device)
+        node_loss = self.RLL_loss(scores, dists, labels)
         loss_list.append(node_loss*thetas[0])
 
-        scores = self.attr_forward(nodes,data)
-        attr_loss = self.RLL_loss(scores,dists,labels)
+        scores = self.attr_forward(edge_index, data)
+        attr_loss = self.RLL_loss(scores, dists, labels)
         loss_list.append(attr_loss*thetas[1])
          
-        unique_nodes = torch.unique(nodes)
+        unique_nodes = torch.unique(edge_index)
         first_embs = self.attr_emb(data)[unique_nodes]
 
         sec_embs = self.node_emb(unique_nodes)
@@ -482,22 +525,33 @@ class DEAL(nn.Module):
         self.losses = losses.data
         return losses.sum()
 
-    def evaluate(self, nodes,data, lambdas=(1,1,1)):
-       
+    def evaluate(self, edge_index: torch.Tensor, data, lambdas=(1, 1, 1)):
+        """
+        res = cmodel.evaluate(test_data, data, lambdas)
+        
+        Parameters
+        ----------
+        nodes
+        data
+        lambdas
+        
+        Returns
+        -------
+        
+        """
         node_emb = self.node_emb(torch.arange(self.node_num).to(self.device)) 
-        first_embs = node_emb[nodes[:,0]]
-        sec_embs = node_emb[nodes[:,1]]
+        first_embs = node_emb[edge_index[:,0]]
+        sec_embs = node_emb[edge_index[:,1]]
         res = self.node_layer(first_embs,sec_embs) * lambdas[0]
 
         node_emb = self.attr_emb(data)
-        first_embs = node_emb[nodes[:,0]]
-        sec_embs = node_emb[nodes[:,1]]
+        first_embs = node_emb[edge_index[:,0]]
+        sec_embs = node_emb[edge_index[:,1]]
         res = res + self.attr_layer(first_embs,sec_embs)* lambdas[1]
-
         
-        first_nodes = nodes[:,0]
+        first_nodes = edge_index[:,0]
         first_embs = self.attr_emb(data)[first_nodes]
-        sec_embs = self.node_emb(torch.LongTensor(nodes[:,1]).to(self.device))
+        sec_embs = self.node_emb(edge_index[:,1].to(self.device))
         res = res + self.inter_layer(first_embs,sec_embs)* lambdas[2]
 
         return res

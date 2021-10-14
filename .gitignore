@@ -1,4 +1,6 @@
 datasets
+data
+reference
 **.dat
 
 .mypy_cache
